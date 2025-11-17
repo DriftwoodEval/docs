@@ -1,0 +1,57 @@
+---
+title: Questionnaires
+description: A guide in my new Starlight docs site.
+---
+
+import { LinkCard } from "@astrojs/starlight/components";
+
+<LinkCard
+  title="Questionnaires on GitHub"
+  href="https://github.com/driftwoodeval/questionnaires"
+/>
+
+## QSend
+
+QSend is the first half of questionnaires. It runs [locally](/glossary#running-locally) and must be monitored by a person, who will step in if there are any issues. It creates questionnaire links on QGlobal, MHS, and WPS the same way a person does, but can move much faster than a person can.
+
+QSend consults the [prioritization sheet](/documents/prioritization-sheet) to determine who to send questionnaires to, and which questionnaires to send. For QSend to run a client, they must have:
+
+- A name
+- A client ID
+- A `For` column for prospective diagnosis
+- Either:
+  - `DA Qs Needed` checked and `DA Qs Sent` NOT checked
+  - `EVAL Qs Needed` checked and `EVAL Qs Sent` NOT checked
+  - `DA Qs Needed` and `EVAL Qs Needed` checked, `DA Qs Sent` and `EVAL Qs Sent` NOT checked
+
+When QSend runs a client, it first checks the [database](/glossary#database) to see if the client has already failed before. If the client has failed before for a reason that can resolve over time, like being too young for the prospective diagnosis, having not opened the patient portal, or having not signed the documents, QSend will continue. If the client has failed for any other reason, QSend will re-add them to the [failures sheet](/documents/failures-sheet) and database.
+
+QSend goes to TherapyAppointment and searches for the client's ID. It then checks if the client has opened the patient portal, made an account, and signed the consent forms. If they haven't, it adds them to the failures sheet and database, to be texted reminders by [QReceive](/programs/questionnaires#qreceive). If they have, QSend uses the data from TherapyAppointment and prioritization sheet to determine which questionnaires to create.
+
+If the client is too young, the information from the prioritization sheet is malformed, or the client would be be re-assigned questionnaires we already sent, QSend adds them to the failures sheet and database. If there are no issues with the questionnaires to create, QSend begins going to the questionnaire brokers' sites and creating questionnaires. If all goes well, QSend navigates back to the client's TherapyAppointment page and messages them with all of the links to their questionnaires. It also creates entries in the database that can be seen in [Winnonah](/programs/winnonah), and marks `DA Qs Sent` or/and `EVAL Qs Sent` as appropriate.
+
+### Flowchart
+
+```mermaid
+flowchart TD
+    punch(Client on punchlist meets criteria) --> failedbefore[QSend checks if client has failed before]
+    failedbefore --> |Client failed before with an error that won't resolve with time| failure
+    failedbefore --> |Client has not failed before / failed with a reason that can resolve over time| portalcheck[QSend checks if client has opened portal]
+    portalcheck --> |Client has NOT opened portal| failure([Add to failure sheet and DB])
+    portalcheck --> |Client has opened portal| doccheck[QSend checks if client has signed documents]
+    doccheck --> |Client has NOT signed documents| failure
+    doccheck --> |Client has signed documents| getquestionnaires[QSend gets the list of questionnaires to create based on client's prospective DX, age, and type of appointment]
+    getquestionnaires --> |Client is too young for prospective DX| failure
+    getquestionnaires --> |Questionnaires are being re-requested that we already know were sent by us| failure
+    getquestionnaires --> genq[QSend goes to each questionnaire brokers' site and creates the questionnaires]
+    genq --> enterindb[QSend enters each questionnaire as JUST_SENT in the database]
+    genq --> |A site is broken| failure
+    enterindb --> genq
+    enterindb --> send[QSend sends the questionnaires to the client over TherapyAppointment]
+    send --> marksent([QSend marks the questionnaires as PENDING in the database])
+
+```
+
+## QReceive
+
+QReceive is the second half of questionnaires. It runs automatically every day at 1 pm on a server without human supervision. It checks on questionnaires' completion status, clients' account creation and consent documents, and texts clients reminders.

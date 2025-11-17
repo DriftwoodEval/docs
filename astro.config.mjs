@@ -1,26 +1,44 @@
 // @ts-check
-import { defineConfig } from 'astro/config';
-import starlight from '@astrojs/starlight';
+
+import starlight from "@astrojs/starlight";
+import { defineConfig } from "astro/config";
+import mermaid from "astro-mermaid";
 
 // https://astro.build/config
 export default defineConfig({
-	integrations: [
-		starlight({
-			title: 'My Docs',
-			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/withastro/starlight' }],
-			sidebar: [
-				{
-					label: 'Guides',
-					items: [
-						// Each item here is one entry in the navigation menu.
-						{ label: 'Example Guide', slug: 'guides/example' },
-					],
-				},
-				{
-					label: 'Reference',
-					autogenerate: { directory: 'reference' },
-				},
-			],
-		}),
-	],
+  site: "https://docs.winnonah.xyz",
+  integrations: [
+    mermaid({
+      autoTheme: true,
+    }),
+    starlight({
+      title: "Driftwood Docs",
+      logo: {
+        light: "./src/assets/logo-black.svg",
+        dark: "./src/assets/logo-white.svg",
+      },
+      social: [
+        {
+          icon: "github",
+          label: "GitHub",
+          href: "https://github.com/DriftwoodEval/docs",
+        },
+      ],
+      pagination: false,
+      sidebar: [
+        { label: "Home", link: "/" },
+        {
+          label: "Programs",
+          autogenerate: { directory: "programs" },
+        },
+        {
+          label: "Documents",
+          autogenerate: { directory: "documents" },
+        },
+        { label: "Glossary", link: "/glossary" },
+      ],
+      lastUpdated: true,
+      customCss: ["@fontsource-variable/inter", "./src/styles/custom.css"],
+    }),
+  ],
 });
