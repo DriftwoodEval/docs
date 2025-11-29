@@ -1,0 +1,12 @@
+services:
+  docs:
+    restart: always
+    image: ghcr.io/driftwoodeval/docs:latest
+    container_name: docs
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-docs
+    command: tunnel --no-autoupdate run --token
+      ${CF_TOKEN}
+    restart: always

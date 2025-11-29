@@ -4,6 +4,7 @@ description: A guide in my new Starlight docs site.
 ---
 
 import { LinkCard } from "@astrojs/starlight/components";
+import { Steps } from "@astrojs/starlight/components";
 
 <LinkCard
   title="Questionnaires on GitHub"
@@ -12,9 +13,9 @@ import { LinkCard } from "@astrojs/starlight/components";
 
 ## QSend
 
-QSend is the first half of questionnaires. It runs [locally](/glossary#running-locally) and must be monitored by a person, who will step in if there are any issues. It creates questionnaire links on QGlobal, MHS, and WPS the same way a person does, but can move much faster than a person can.
+QSend an automated program that handles the first part of our questionnaire process: creating and sending links to clients. It creates questionnaire links on QGlobal, MHS, and WPS. It runs [locally](/glossary#running-locally) and must be monitored by a person, who will step in if there are any issues.
 
-QSend consults the [prioritization sheet](/documents/prioritization-sheet) to determine who to send questionnaires to, and which questionnaires to send. For QSend to run a client, they must have:
+QSend checks the [prioritization sheet](/documents/prioritization-sheet) to decide which clients need questionnaires. For QSend to run on a client, they must have:
 
 - A name
 - A client ID
@@ -24,34 +25,95 @@ QSend consults the [prioritization sheet](/documents/prioritization-sheet) to de
   - `EVAL Qs Needed` checked and `EVAL Qs Sent` NOT checked
   - `DA Qs Needed` and `EVAL Qs Needed` checked, `DA Qs Sent` and `EVAL Qs Sent` NOT checked
 
-When QSend runs a client, it first checks the [database](/glossary#database) to see if the client has already failed before. If the client has failed before for a reason that can resolve over time, like being too young for the prospective diagnosis, having not opened the patient portal, or having not signed the documents, QSend will continue. If the client has failed for any other reason, QSend will re-add them to the [failures sheet](/documents/failures-sheet) and database.
+### Process
 
-QSend goes to TherapyAppointment and searches for the client's ID. It then checks if the client has opened the patient portal, made an account, and signed the consent forms. If they haven't, it adds them to the failures sheet and database, to be texted reminders by [QReceive](/programs/questionnaires#qreceive). If they have, QSend uses the data from TherapyAppointment and prioritization sheet to determine which questionnaires to create.
+<Steps>
+1. **Check Past Failures**.
+    QSend first checks the [database](/glossary#database) for any previous attempts to send questionnaires to this client. If the client failed before for a resolvable/temporary reason, QSend proceeds (retrying the client). If the client failed for any other reason, QSend updates the failure and skips this client
 
-If the client is too young, the information from the prioritization sheet is malformed, or the client would be be re-assigned questionnaires we already sent, QSend adds them to the failures sheet and database. If there are no issues with the questionnaires to create, QSend begins going to the questionnaire brokers' sites and creating questionnaires. If all goes well, QSend navigates back to the client's TherapyAppointment page and messages them with all of the links to their questionnaires. It also creates entries in the database that can be seen in [Winnonah](/programs/winnonah), and marks `DA Qs Sent` or/and `EVAL Qs Sent` as appropriate.
+2. **Check Portal Status**.
+   QSend searches TherapyAppointment using the client's ID. If verifies the client has opened the patient portal (made an account) and signed the consent forms. If they haven't, the client is marked as a Failure in the database and failures sheet. This will trigger a reminder text in [QReceive](/programs/questionnaires#qreceive). QSend skips this client. If they have, QSend proceeds. QSend updates the database to mark the failure as received, but not the spreadsheet.
+
+3. **Determine Questionnaires Needed**.
+   QSend uses the client's information (age, prospective diagnosis, appointment type) to calculate the set of questionnaires to generate.
+
+4. **Generate and Send Links**.
+   QSend logs into the questionnaires sites and creates a link for each questionnaire. After creating each link, it enters it into the database (viewable in [Winnonah](/programs/winnonah)) with the status `JUST_ADDED`. QSend sends a message containing all of the links to the client through TherapyAppointment. QSend changes the questionnaires status in the database to `PENDING` and marks DA Qs Sent`or/and`EVAL Qs Sent` on the prioritization sheet as appropriate.
+
+</Steps>
+
+### Failures / Failing
+
+A Failure is a record created in the database and on the [failures
+sheet](/documents/failures-sheet) when a problem is encountered that means a
+client cannot be sent questionnaires or cannot have records requested.
+
+A non-exhaustive list of failure reasons that require manual intervention:
+
+- **Overlapping questionnaires**: Client needs Qs that are already pending, according to our decision tree that accounts for age, prospective diagnosis, and appointment type.
+- **Failure on questionnaire site** / **unable to find client**: If TherapyAppointment or one of the sites we use to generate questionnaires was down or otherwise broken. "Unable to find client" will also occur if the client is inactive in TherapyAppointment.
+- **Languages other than English**: QSend cannot send questionnaires for languages other than English.
+
+Resolvable/temporary failures include:
+
+- Portal Not Opened: Client hasn't accessed TherapyAppointment, and so hasn't signed documents to consent.
+- Docs Not Signed: Client has made a TherapyAppointment account, but hasn't signed consent forms in TherapyAppointment.
+- Too Young: Client is under the minimum age for the prospective diagnosis.
 
 ### Flowchart
 
 ```mermaid
 flowchart TD
-    punch(Client on punchlist meets criteria) --> failedbefore[QSend checks if client has failed before]
-    failedbefore --> |Client failed before with an error that won't resolve with time| failure
-    failedbefore --> |Client has not failed before / failed with a reason that can resolve over time| portalcheck[QSend checks if client has opened portal]
-    portalcheck --> |Client has NOT opened portal| failure([Add to failure sheet and DB])
-    portalcheck --> |Client has opened portal| doccheck[QSend checks if client has signed documents]
-    doccheck --> |Client has NOT signed documents| failure
-    doccheck --> |Client has signed documents| getquestionnaires[QSend gets the list of questionnaires to create based on client's prospective DX, age, and type of appointment]
-    getquestionnaires --> |Client is too young for prospective DX| failure
-    getquestionnaires --> |Questionnaires are being re-requested that we already know were sent by us| failure
-    getquestionnaires --> genq[QSend goes to each questionnaire brokers' site and creates the questionnaires]
-    genq --> enterindb[QSend enters each questionnaire as JUST_SENT in the database]
-    genq --> |A site is broken| failure
-    enterindb --> genq
-    enterindb --> send[QSend sends the questionnaires to the client over TherapyAppointment]
-    send --> marksent([QSend marks the questionnaires as PENDING in the database])
+    punch(Client on prioritization sheet meets criteria) --> failedBefore[QSend checks if client has failed before]
+    failedBefore --> |Client failed before with an error that won't resolve with time| failure
+    failedBefore --> |Client has not failed before / failed with a reason that can resolve over time| portalCheck[QSend checks if client has opened portal]
+    portalCheck --> |Client has NOT opened portal| failure([Add to failure sheet and DB])
+    portalCheck --> |Client has opened portal| docCheck[QSend checks if client has signed documents]
+    docCheck --> |Client has NOT signed documents| failure
+    docCheck --> |Client has signed documents| getQuestionnaires[QSend gets the list of questionnaires to create based on client's prospective DX, age, and type of appointment]
+    getQuestionnaires --> |Client is too young for prospective DX| failure
+    getQuestionnaires --> |Questionnaires are being re-requested that we already know were sent by us| failure
+    getQuestionnaires --> genQ[QSend goes to each questionnaire brokers' site and creates the questionnaires]
+    genQ --> enterInDB[QSend enters each questionnaire as JUST_SENT in the database]
+    genQ --> |A site is broken| failure
+    enterInDB --> genQ
+    enterInDB --> send[QSend sends the questionnaires to the client over TherapyAppointment]
+    send --> markSent([QSend marks the questionnaires as PENDING in the database])
 
 ```
 
 ## QReceive
 
-QReceive is the second half of questionnaires. It runs automatically every day at 1 pm on a server without human supervision. It checks on questionnaires' completion status, clients' account creation and consent documents, and texts clients reminders.
+QReceive is an automated program that manages the second part of the questionnaires process: checking on the status of questionnaires and texting clients reminders. It runs automatically every day at 1 pm on a server without human supervision.
+
+QReceive performs 3 main tasks each run:
+
+1. **Status Check**: Visits each active client's `PENDING` or `SPANISH` questionnaire links to see if they have been completed.
+2. **Failure Check**: Checks if clients who previously failed for temporary reasons have since resolved these issues. It will then update the database, but not the prioritization sheet.
+3. **Text Reminders**: Reminds clients whose questionnaires or failure issues are unresolved, following a specific schedule.
+
+The schedule for reminders is represented in the following table.
+|Reminder Count|Days Since Last Reminder|Message|
+|---|--|--|
+|0|0 days| Hello, this is [name] from Driftwood Evaluation Center. We are ready to schedule your appointment! In order for us to schedule your appointment, we need you to complete your questionnaire[s]. You can find [it/them] in the messages tab in our patient portal: https://portal.therapyappointment.com Please reply to this text with any questions. Thank you for your help.|
+|1|7 days| Hello, this is [name] with Driftwood Evaluation Center. We are waiting for you to complete the questionnaire[s] sent to you on [date] ([number] days ago). We are unable to schedule your appointment until [it/them] [is/are] completed in [its/their] entirety. You can find [it/them] in the messages tab in our patient portal: https://portal.therapyappointment.com Please reply to this text with any questions. Thank you for your help.|
+|2|5 days| This is Driftwood Evaluation Center. If your questionnaire[s] [is/are] not completed by [date] (3 days from now), we will close out your referral. Reply to this text with any concerns. You can find the questionnaire[s] in the messages tab in our patient portal: https://therapyappointment.com|
+
+If the questionnaires are still not done 3 days after the final message, the client will be added to the drop list in the email and in Winnonah.
+
+Regardless of whether the run was successful or encountered errors (such as being out of text credits), QReceive compiles all status updates and the drop list into a summary email.
+
+## Records
+
+Records is an automated program that handles the retrieval and initial sending of Consent to Release of Information forms to schools. It runs [locally](/glossary#running-locally) and must be monitored by a person, who will step in if there are any issues.
+
+### Process
+
+<Steps>
+1. **Get Client List From Prioritization Sheet**: A client is ran if `Records Needed` is checked and `Records Requested?` is **not** checked or a date. Clients flagged for ADHD only are also excluded.
+
+2. **Download Consent Forms**: Records logs into TherapyAppointment and searches each client by their ID. If the client hasn't logged in or signed their consent forms, they are marked as a [failure](/programs/questionnaires#failures--failing) to be reminded by [QReceive](/programs/questionnaires#qreceive). If they have, Records downloads their consent forms as PDFs.
+
+3. **Upload and Email**: Records uploads each downloaded PDF to the Records folder in Google Drive. Records then extracts the school district name from the PDFs. It will then check that the sending and receiving names are the same, and if it has a known contact for the school district. If either of these cases are false, Records will add this to the failure sheet and leave the PDFs in the Records folder in Google Drive. If they're true, Records will send the email itself.
+
+</Steps>
