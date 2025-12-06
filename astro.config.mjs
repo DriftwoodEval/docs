@@ -39,6 +39,9 @@ export default defineConfig({
       ],
       lastUpdated: true,
       customCss: ["@fontsource-variable/inter", "./src/styles/custom.css"],
+      editLink: {
+        baseUrl: "https://github.com/DriftwoodEval/docs/edit/main/",
+      },
     }),
   ],
 });
